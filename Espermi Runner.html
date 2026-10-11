@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Espermi Runner</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#1b1f3a;--fg:#fff}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:'Trebuchet MS',Verdana,sans-serif;overflow:hidden}
+#wrap{position:relative;max-width:900px;margin:0 auto;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%}
+canvas{width:100%;max-height:78%;aspect-ratio:16/9;background:#000;border:4px solid #fff;border-radius:10px;image-rendering:pixelated;touch-action:none}
+#ov{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(10,10,40,.8);padding:12px}
+.card{background:#fff;color:#222;border-radius:14px;padding:18px;max-width:520px;width:100%;box-shadow:0 8px 0 #0004}
+.card h2{margin:0 0 8px;color:#e8336d}
+button.o{display:block;width:100%;margin:6px 0;padding:10px;font:inherit;font-size:16px;border:3px solid #333;border-radius:10px;background:#ffe27a;cursor:pointer}
+button.o:hover{background:#ffd23f}button.ok{background:#7be08a!important}button.no{background:#ff8c8c!important}
+#tc{display:flex;gap:10px;margin-top:8px}
+#tc button{font-size:26px;width:76px;height:54px;border-radius:12px;border:3px solid #fff;background:#ffffff22;color:#fff;touch-action:none}
+</style></head><body>
+<div id="wrap">
+<canvas id="c" width="800" height="450"></canvas>
+<div id="tc"><button id="bl">◀</button><button id="br">▶</button><button id="bj">⤒</button></div>
+<div id="ov"><div class="card" id="card"></div></div>
+</div>
+<script>
+const cv=document.getElementById('c'),g=cv.getContext('2d'),ov=document.getElementById('ov'),card=document.getElementById('card');
+const W=800,H=450,GY=380;
+const Q=[
+["¿Qué método, además de prevenir el embarazo, ayuda a prevenir infecciones de transmisión sexual (ITS)?",["Píldora","Preservativo","DIU de cobre"],1,"El preservativo (masculino o femenino) es el único que protege a la vez de embarazo e ITS."],
+["¿Cómo se toma la píldora anticonceptiva para que sea eficaz?",["Solo después de la relación","Todos los días, a la misma hora","Una vez al mes"],1,"La constancia diaria es clave. Olvidos reducen su eficacia."],
+["El DIU de cobre es un método…",["Hormonal de una semana","No hormonal y de larga duración","Que protege del VIH"],1,"Se coloca en el útero por un profesional y dura años, pero no protege de ITS."],
+["¿Cuánto puede durar un implante subdérmico?",["Un día","Una semana","Alrededor de 3 años"],2,"Es una varilla bajo la piel del brazo que libera hormonas durante unos 3 años."],
+["La anticoncepción de emergencia se debe tomar…",["Lo antes posible tras una relación sin protección","Una semana después","Antes de cada relación"],0,"Cuanto antes, mejor. No es un método para uso habitual."],
+["¿Cómo usar bien el preservativo masculino?",["Dos juntos para mayor seguridad","Uno nuevo en cada relación","Reutilizarlo si está limpio"],1,"Usar dos a la vez aumenta la fricción y el riesgo de rotura."],
+["El método del calendario o ritmo es…",["El más eficaz","Poco fiable, porque los ciclos varían","Protector contra ITS"],1,"Los ciclos cambian y los espermatozoides pueden vivir varios días."],
+["El coito interrumpido (retirarse antes) es…",["Muy seguro","Poco seguro: puede haber espermatozoides antes de eyacular","Igual de eficaz que el condón"],1,"El líquido preseminal puede contener espermatozoides."],
+["Después de una vasectomía…",["Es efectiva al instante","Se necesita un espermiograma para confirmarla","Protege de las ITS"],1,"Hay que esperar y comprobar que ya no hay espermatozoides; tampoco protege de ITS."]
+];
+const POW=['salto','escudo','turbo'];
+const POWN={salto:'⬆ Salto doble',escudo:'🛡 Escudo',turbo:'⚡ Turbo'};
+// niveles: solids [x,y,w,h], spikes [x,y,w], enemies [x,range], qs [x,y,qIndex]
+const LV=[
+{n:'Pradera Soleada',w:2300,sky:['#6ec6ff','#d6f1ff'],gr:'#5bc44a',dirt:'#8a5a2b',
+ s:[[0,GY,650,70],[760,GY,520,70],[1380,GY,920,70],[300,290,100,16],[900,280,110,16],[1100,220,90,16],[1600,290,120,16],[1900,240,100,16]],
+ sp:[[560,364,40],[1000,364,40],[1750,364,50]],en:[[1150,100],[1500,120],[2050,100]],
+ q:[[340,226,0],[1130,156,1],[1930,176,2]]},
+{n:'Playa Tropical',w:2500,sky:['#ffd27a','#fff3c9'],gr:'#f2d98c',dirt:'#d9b66a',
+ s:[[0,GY,500,70],[620,GY,300,70],[1040,GY,420,70],[1580,GY,920,70],[420,300,90,16],[540,230,90,16],[960,290,90,16],[1480,300,90,16],[1800,270,110,16],[2100,230,100,16]],
+ sp:[[300,364,40],[1200,364,50],[1900,364,60]],en:[[700,80],[1250,100],[1700,120],[2200,120]],
+ q:[[570,166,3],[990,226,4],[2130,166,5]]},
+{n:'Cueva Nocturna',w:2700,sky:['#10122e','#2a2160'],gr:'#6a5d9c',dirt:'#3c335f',
+ s:[[0,GY,450,70],[560,GY,250,70],[920,GY,300,70],[1330,GY,300,70],[1740,GY,960,70],[460,290,80,16],[820,260,90,16],[1230,250,90,16],[1640,290,80,16],[2000,270,100,16],[2300,220,100,16]],
+ sp:[[300,364,40],[650,364,40],[1400,364,50],[1900,364,60],[2400,364,50]],en:[[1000,90],[1800,120],[2150,120],[2450,100]],
+ q:[[840,196,6],[2030,206,7],[2330,156,8]]}
+];
+let st='title',li=0,L,solids,blocks,enemies,p,cam=0,lives=3,score=0,ok=0,pw={},inv=0,fr=0,flagHit=false;
+const K={};
+addEventListener('keydown',e=>{K[e.code]=1;if(['Space','ArrowUp','ArrowDown'].includes(e.code))e.preventDefault();if((e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW')&&st==='play')jumpReq()});
+addEventListener('keyup',e=>K[e.code]=0);
+function hold(id,k){const b=document.getElementById(id);b.onpointerdown=e=>{K[k]=1;if(k==='Jump')jumpReq()};b.onpointerup=b.onpointerleave=()=>K[k]=0}
+hold('bl','ArrowLeft');hold('br','ArrowRight');hold('bj','Jump');
+function load(i){li=i;L=LV[i];solids=L.s.map(a=>({x:a[0],y:a[1],w:a[2],h:a[3]}));
+ blocks=L.q.map(a=>({x:a[0],y:a[1],w:32,h:32,q:a[2],used:false}));
+ enemies=L.en.map(a=>({x:a[0],x0:a[0],r:a[1],y:GY-24,w:28,h:24,d:1,dead:false}));
+ pw={};respawn();flagHit=false}
+function respawn(){p={x:50,y:300,w:24,h:30,vx:0,vy:0,face:1,gnd:false,jumps:0};inv=90}
+function jumpReq(){if(p.gnd){p.vy=-11.5;p.gnd=false;p.jumps=1}else if(pw.salto&&p.jumps<2){p.vy=-10.5;p.jumps=2}}
+function hit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y}
+function hurt(fall){if(!fall&&inv>0)return;if(!fall&&pw.escudo){delete pw.escudo;inv=70;return}
+ lives--;if(lives<=0){st='over';showOver();return}respawn();if(fall)pw={}}
+function ask(b){st='quiz';const q=Q[b.q];const idx=[0,1,2].sort(()=>Math.random()-.5);
+ card.innerHTML='<h2>❓ Bloque de poder</h2><p><b>'+q[0]+'</b></p>';
+ idx.forEach(i=>{const bt=document.createElement('button');bt.className='o';bt.textContent=q[1][i];bt.onclick=()=>answer(b,q,i,bt);card.appendChild(bt)});
+ ov.style.display='flex'}
+function answer(b,q,i,bt){const good=i===q[2];b.used=true;
+ card.querySelectorAll('button').forEach(x=>x.disabled=true);bt.classList.add(good?'ok':'no');
+ let msg;if(good){ok++;score+=100;const pn=POW[(ok-1)%3];pw[pn]=1;msg='✅ ¡Correcto! Ganaste: <b>'+POWN[pn]+'</b>'}else msg='❌ Casi. Esta vez no hay poder.';
+ const d=document.createElement('div');d.innerHTML='<p>'+msg+'<br><small>'+q[3]+'</small></p>';card.appendChild(d);
+ const n=document.createElement('button');n.className='o';n.textContent='Continuar';n.onclick=()=>{ov.style.display='none';st='play'};card.appendChild(n)}
+function showTitle(){card.innerHTML='<h2>🏁 Espermi Runner</h2><p>Un espermatozoide valiente corre por 3 mundos hasta llegar a la meta. Golpea los <b>bloques ?</b> y responde preguntas sobre <b>métodos anticonceptivos</b> para ganar poderes.</p><p><small>Flechas / A D para moverte · Espacio o ↑ para saltar · Salta sobre los bichitos para vencerlos · Evita los pinchos.</small></p><button class="o" onclick="start()">▶ Jugar</button><p><small>Juego educativo informativo. Ante dudas, consulta a un profesional de la salud.</small></p>';ov.style.display='flex'}
+function showOver(){card.innerHTML='<h2>💔 Fin del juego</h2><p>Respuestas correctas: '+ok+' de 9 · Puntos: '+score+'</p><button class="o" onclick="start()">Reintentar</button>';ov.style.display='flex'}
+function showWin(){st='win';card.innerHTML='<h2>🎉 ¡Llegaste a la meta!</h2><p>Respondiste bien <b>'+ok+' de 9</b> preguntas · Puntos: '+score+'</p><p><small>Recuerda: el preservativo es el único método que también previene ITS, y un profesional de salud puede ayudarte a elegir el método que mejor se adapte a ti.</small></p><button class="o" onclick="start()">Jugar de nuevo</button>';ov.style.display='flex'}
+function start(){ov.style.display='none';lives=3;score=0;ok=0;load(0);st='play'}
+function update(){fr++;if(inv>0)inv--;
+ const sp=pw.turbo?4.4:3;p.vx=0;
+ if(K.ArrowLeft||K.KeyA){p.vx=-sp;p.face=-1}if(K.ArrowRight||K.KeyD){p.vx=sp;p.face=1}
+ const all=solids.concat(blocks);
+ p.x+=p.vx;if(p.x<0)p.x=0;for(const s of all)if(hit(p,s)){p.x=p.vx>0?s.x-p.w:s.x+s.w}
+ p.vy=Math.min(p.vy+.55,12);p.y+=p.vy;p.gnd=false;
+ for(const s of all)if(hit(p,s)){if(p.vy>0){p.y=s.y-p.h;p.gnd=true;p.jumps=0}else p.y=s.y+s.h;p.vy=0;
+  if(s.q!==undefined&&!s.used){ask(s);return}}
+ if(p.y>H+60)hurt(true);
+ for(const s of L.sp)if(hit(p,{x:s[0],y:s[1],w:s[2],h:16}))hurt();
+ for(const e of enemies){if(e.dead)continue;e.x+=e.d*1.2;if(e.x>e.x0+e.r||e.x<e.x0-e.r)e.d*=-1;
+  if(hit(p,e)){if(p.vy>0&&p.y+p.h-e.y<18){e.dead=true;p.vy=-8;p.jumps=1;score+=50}else hurt()}}
+ const goal={x:L.w-120,y:GY-70,w:50,h:70};
+ if(!flagHit&&hit(p,goal)){flagHit=true;score+=200;if(li<2){load(li+1)}else showWin()}
+ cam=Math.max(0,Math.min(L.w-W,p.x-300))}
+function sperm(x,y,f,t){g.save();g.translate(x+12,y+15);g.scale(f,1);
+ g.strokeStyle='#fff';g.lineWidth=5;g.lineCap='round';g.beginPath();g.moveTo(-6,6);
+ for(let i=1;i<=6;i++)g.lineTo(-6-i*5,6+Math.sin(t/4+i)*5);g.stroke();
+ g.strokeStyle='#e8336d';g.lineWidth=1.5;g.stroke();
+ g.fillStyle='#fff';g.strokeStyle='#e8336d';g.lineWidth=2;g.beginPath();g.ellipse(2,0,13,15,0,0,7);g.fill();g.stroke();
+ g.fillStyle='#222';g.beginPath();g.arc(6,-4,3,0,7);g.arc(-1,-4,3,0,7);g.fill();
+ g.fillStyle='#fff';g.fillRect(5,-6,1.5,1.5);g.fillRect(-2,-6,1.5,1.5);
+ g.strokeStyle='#222';g.beginPath();g.arc(3,3,4,.2,2.9);g.stroke();
+ g.fillStyle='#e8336d';g.beginPath();g.moveTo(-8,-10);g.lineTo(2,-18);g.lineTo(12,-10);g.fill();
+ if(pw.escudo){g.strokeStyle='#5ad1ff';g.lineWidth=3;g.beginPath();g.arc(2,0,22,0,7);g.stroke()}
+ g.restore()}
+function draw(){const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,L.sky[0]);gr.addColorStop(1,L.sky[1]);g.fillStyle=gr;g.fillRect(0,0,W,H);
+ if(li===0){g.fillStyle='#fff';for(let i=0;i<6;i++){const x=((i*330-cam*.3)%1980+1980)%1980-150;g.beginPath();g.arc(x,70+i%3*30,26,0,7);g.arc(x+30,62+i%3*30,32,0,7);g.arc(x+60,72+i%3*30,24,0,7);g.fill()}
+  g.fillStyle='#4aa83a';for(let i=0;i<8;i++){const x=i*300-cam*.5%300-100;g.beginPath();g.arc(x+((cam*.5)%300),GY,110,Math.PI,0);g.fill()}}
+ if(li===1){g.fillStyle='#ffb000';g.beginPath();g.arc(650,80,40,0,7);g.fill();g.fillStyle='#3fb6d8';g.fillRect(0,300,W,80);
+  g.fillStyle='#ffffff88';for(let i=0;i<10;i++)g.fillRect(((i*90-cam*.2)%900+900)%900,310+i%4*14,40,4)}
+ if(li===2){g.fillStyle='#fff';for(let i=0;i<40;i++)g.fillRect((i*97-cam*.1+8000)%W,(i*53)%250,2,2);
+  g.fillStyle='#1a1540';for(let i=0;i<12;i++){const x=((i*80-cam*.6)%960+960)%960-80;g.beginPath();g.moveTo(x,0);g.lineTo(x+30,70+i%3*30);g.lineTo(x+60,0);g.fill()}}
+ g.save();g.translate(-cam,0);
+ for(const s of solids){g.fillStyle=L.dirt;g.fillRect(s.x,s.y,s.w,s.h);g.fillStyle=L.gr;g.fillRect(s.x,s.y,s.w,Math.min(10,s.h));
+  g.strokeStyle='#0003';g.strokeRect(s.x,s.y,s.w,s.h)}
+ g.fillStyle='#eee';for(const s of L.sp)for(let x=s[0];x<s[0]+s[2];x+=10){g.beginPath();g.moveTo(x,s[1]+16);g.lineTo(x+5,s[1]);g.lineTo(x+10,s[1]+16);g.fill()}
+ for(const b of blocks){g.fillStyle=b.used?'#999':'#ffc400';g.fillRect(b.x,b.y,32,32);g.strokeStyle='#7a4b00';g.lineWidth=3;g.strokeRect(b.x,b.y,32,32);
+  if(!b.used){g.fillStyle='#7a4b00';g.font='bold 22px sans-serif';g.textAlign='center';g.fillText('?',b.x+16,b.y+24)}}
+ for(const e of enemies){if(e.dead)continue;g.fillStyle='#8e44ad';g.beginPath();g.ellipse(e.x+14,e.y+14,15,11,0,0,7);g.fill();
+  g.fillStyle='#fff';g.fillRect(e.x+7,e.y+7,5,6);g.fillRect(e.x+17,e.y+7,5,6);g.fillStyle='#000';g.fillRect(e.x+9,e.y+9,2,3);g.fillRect(e.x+19,e.y+9,2,3);
+  g.fillRect(e.x+3,e.y+22,6,3);g.fillRect(e.x+19,e.y+22,6,3)}
+ // meta: óvulo sonriente
+ const gx=L.w-95,gy=GY-50;g.fillStyle='#ffd6e8';g.strokeStyle='#e8336d';g.lineWidth=4;g.beginPath();g.arc(gx,gy,38,0,7);g.fill();g.stroke();
+ g.fillStyle='#ffb3d1';g.beginPath();g.arc(gx,gy,20,0,7);g.fill();g.fillStyle='#222';g.fillRect(gx-10,gy-6,4,6);g.fillRect(gx+6,gy-6,4,6);g.beginPath();g.arc(gx,gy+2,8,.2,2.9);g.stroke();
+ g.fillStyle='#fff';g.font='bold 14px sans-serif';g.fillText('META',gx,gy-45);
+ if(!(inv>0&&fr%6<3))sperm(p.x,p.y,p.face,fr);
+ g.restore();
+ g.fillStyle='#0008';g.fillRect(0,0,W,30);g.fillStyle='#fff';g.font='bold 15px sans-serif';g.textAlign='left';
+ g.fillText('♥'.repeat(Math.max(lives,0))+'  Mundo '+(li+1)+': '+L.n+'  ·  Puntos '+score+'  ·  ✔ '+ok+'/9',10,20);
+ g.textAlign='right';g.fillText(Object.keys(pw).map(k=>POWN[k]).join('  '),W-10,20)}
+function loop(){if(st==='play')update();if(L)draw();requestAnimationFrame(loop)}
+load(0);showTitle();loop();
+</script></body></html>
